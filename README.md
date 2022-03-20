@@ -1,56 +1,123 @@
-# Exercise-04c-Levels
+# Exercise-04d-Save-and-Load
 
 Exercise for MSCH-C220
 
-A demonstration of this exercise is available at [https://youtu.be/psRW-I77QKw](https://youtu.be/psRW-I77QKw)
+A demonstration of this exercise is available at [https://youtu.be/WSBgQ3PBmbA](https://youtu.be/WSBgQ3PBmbA).
 
-This exercise is designed to continue our creation of a 2D Platformer, by laying out three levels using Godot's TileMap node.
+This exercise is designed to continue our creation of a 2D Platformer, by demonstrating the wrong and the right (better?) ways to save and load data.
 
-Fork this repository. When that process has completed, make sure that the top of the repository reads [your username]/Exercise-04c-Levels. *Edit the LICENSE and replace BL-MSCH-C220-S22 with your full name.* Commit your changes.
+Fork this repository. When that process has completed, make sure that the top of the repository reads [your username]/Exercise-04d-Save-and-Load. *Edit the LICENSE and replace BL-MSCH-C220-S22 with your full name.* Commit your changes.
 
 Clone the repository to a Local Path on your computer.
 
-Open Godot. Import the project.godot file and open the "Levels" project.
+There are two folders in this repository, each with a complete Godot project.
 
-This project consists of three levels (res://Levels/Level1.tscn, Level2.tscn, Level3.tscn), each of which has three TileMap nodes: Background, Platform, and Foreground. Using the provided asset: res://Assets/Tiles.png, create level-specific tilemaps for each of these scenes.
+Open Godot. Navigate to the 01-Config folder. Import the project.godot file and open the "Save and Load: Config" project.
 
-The goal is to allow the player to move from the blue Spawn portal on the left of the level to the orange Exit portal at the right of the level.
+This project implements save an load using a config file. This is certainly an easy way to save data, but it has some important limitations (which is why it should only be used to save configuration information).
 
-Anything in the Background tilemap will appear behind the player, and anything in the Foreground tilemap will appear in front of the player. Neither of these tilemaps will cause a collision (i.e., they are just for decoration).
+Open Global.gd, and replace the `save_game()` and `load_game()` methods with the following (starting on line 58):
+```
+func save_game():
+	save_data["general"]["coins"] = []					# creating a list of all the coins that appear in the scene
+	save_data["general"]["mines"] = []					# creating a list of all the mines in the scene
+	for c in Coins.get_children():						# returns a list of all the nodes in /Game/Coins
+		save_data["general"]["coins"].append(c.position)		# adds the coins to the list
+	for m in Mines.get_children():
+		save_data["general"]["mines"].append(m.position)
+	for section in save_data.keys():					# Go through all the coins and mines and add them as keys to the config file
+		for key in save_data[section]:
+			save_file.set_value(section, key, save_data[section][key])
+	save_file.save(SAVE_PATH)						# write the data to the config file
 
-To begin, select one of the TileMap nodes (Background, Platform, or Foreground), and in the Inspector Panel, select Tile Set->New TileSet. Then Edit the resulting TileSet. This will open a panel at the bottom of the window. Drag Tiles.png from the Assets folder in the FileSystem panel to the left box of the TileSet editor. Select the resulting Tiles.png tileset.
+func load_game():
+	var error = save_file.load(SAVE_PATH)					# load the keys out of the config file
+	if error != OK:								# if there's a problem reading the file, print an error
+		print("Failed loading file")
+		return
+	
+	save_data["general"]["coins"] = []					# initialize a list to temporarily hold the coins and mines
+	save_data["general"]["mines"] = []
+	for section in save_data.keys():
+		for key in save_data[section]:					# go through everything in the config file and add it to the lists
+			save_data[section][key] = save_file.get_value(section, key, null)
+	var _scene = get_tree().change_scene_to(Game)				# reset the scene
+	call_deferred("restart_level")						# when the scene has been loaded, call the reset_level method
+```
 
-You should now see the tileset with an appropriate grid superimposed on it. You will need to create individual 2x2 tiles for each of the assets you will use in this level (for each of the tilesets). I will demonstrate this in more detail in class. Create Region and Collision shapes (using the polygon tool) for each tile.
+Save your project and test it. Blow up a few mines and collect a few coins. Press escape to access the menu, and then save your game. Press the load button and watch what happens. Repeat a few times.
 
-Then, close the editor and begin to lay our your level. This is a code-free way to express yourself creatively. I would recommend using the pencil and paintbucket tools in the toolbar. When you are done, make sure the player can traverse your level to the exit.
+Now, look at the files again in the Windows Explorer or the System Finder. You should see a new file in the 01 Config folder: settings.cfg. Open that file with some kind of text editor and take a look at it. What would happen if you were to edit this file directly?
 
-Repeat for the other two levels. Use the brown and red tiles for level 1, green and yellow for level 2, and blue and white tiles for level 3 (to make them visually distinct).
+In the file, change both the score and lives values to 1000. Save your changes and close the file. Go back to Godot and run your project; load your game. What happened?
+
+Now, it's time to do it the right way. Open the 02-Save folder and import the Godot project. Open Global.gd in the Save and Load: Save File project, and replace the `save_game()` and `load_game()` methods (line 58) with the following:
+```
+func save_game():
+	save_data["general"]["coins"] = []					# creating a list of all the coins and mines that appear in the scene
+	save_data["general"]["mines"] = []
+	for c in Coins.get_children():
+		save_data["general"]["coins"].append(var2str(c.position))	# get a json representation of each of the coins
+	for m in Mines.get_children():
+		save_data["general"]["mines"].append(var2str(m.position))	# and mines
+
+	var save_game = File.new()						# create a new file object
+	save_game.open_encrypted_with_pass(SAVE_PATH, File.WRITE, SECRET)	# prep it for writing to, make sure the contents are encrypted
+	save_game.store_string(to_json(save_data))				# convert the data to a json representation and write it to the file
+	save_game.close()							# close the file so other processes can read from or write to it
+	
+func load_game():
+	var save_game = File.new()						# Create a new file object
+	if not save_game.file_exists(SAVE_PATH):				# If it doesn't exist, skip the rest of the function
+		return
+	save_game.open_encrypted_with_pass(SAVE_PATH, File.READ, SECRET)	# The file should be encrypted
+	var contents = save_game.get_as_text()					# Get the contents of the file
+	var result_json = JSON.parse(contents)					# And parse the JSON
+	if result_json.error == OK:						# Check to make sure the JSON got successfully parsed
+		save_data = result_json.result_json				# If so, load the data from the file into the save_data lists
+	else:
+		print("Error: ", result_json.error)
+	save_game.close()							# Close the file so other processes can read from or write to it
+	
+	var _scene = get_tree().change_scene_to(Game)				# Load the scene
+	call_deferred("restart_level")						# When it's done being loaded, call the restart_level method
+```
+
+Now, instead of using a config file, we are using an actual save file in user space (instead of in the application itself). Also, we are encrypting the file using the SECRET passphrase. Depending on your operating system, that file is stored in one of the following locations:
+```
+Windows: C:\Users\<username>\AppData\Roaming\Godot\app_userdata\<project>\
+MacOS: ~/Library/Application\ Support/Godot/app_userdata/_APPLICATION_NAME_
+Unix: ~/.local/share/godot/app_userdata/_application_name_/
+```
+
+Test the game and play with the save and load functionality.
 
 Quit Godot. In GitHub desktop, add a summary message, commit your changes and push them back to GitHub. If you return to and refresh your GitHub repository page, you should now see your updated files with the time when they were changed.
 
-Now edit the README.md file. When you have finished editing, commit your changes, and then turn in the URL of the main repository page (https://github.com/[username]/Exercise-04c-Levels) on Canvas.
+Now edit the README.md file. When you have finished editing, commit your changes, and then turn in the URL of the main repository page (https://github.com/[username]/Exercise-04d-Save-and-Load) on Canvas.
 
 The final state of the file should be as follows (replacing the "Created by" information with your name):
 ```
-# Exercise-04c-Levels
+# Exercise-04d-Save-and-Load
 
 Exercise for MSCH-C220
 
-The third exercise for the 2D Platformer project, exploring the TileMap node.
-
+The fourth exercise for the 2D Platformer project, exploring save and load (in two projects).
 
 ## Implementation
 
 Built using Godot 3.4.2
 
-The player sprite adapted from [MV Platformer Male](https://opengameart.org/content/mv-platformer-male-32x64) by MoikMellah. CC0 Licensed.
+The player sprite is an adaptation of [MV Platformer Male](https://opengameart.org/content/mv-platformer-male-32x64) by MoikMellah. CC0 Licensed.
 
-The terrain spritemap is from the [Abstract Platformer package](https://kenney.nl/assets/abstract-platformer) available at Kenney.nl.
+The coin sprite is provided by Kenney.nl: [https://kenney.nl/assets/puzzle-pack-2](https://kenney.nl/assets/puzzle-pack-2).
+
+The explosion animation is also adapted from Kenney.nl: [https://kenney.nl/assets/tanks](https://kenney.nl/assets/tanks).
 
 
 ## References
 
-None
+For more information about save and load in Godot, visit the Godot documentation: [https://docs.godotengine.org/en/stable/tutorials/io/saving_games.html#saving-and-reading-data](https://docs.godotengine.org/en/stable/tutorials/io/saving_games.html#saving-and-reading-data)
 
 
 ## Future Development
