@@ -1,7 +1,7 @@
 extends KinematicBody2D
 
 onready var SM = $StateMachine
-onready var Backup = get_node("/root/Game/Player_Container/Backup_Camera")
+onready var VP = get_viewport_rect()
 
 var velocity = Vector2.ZERO
 var jump_power = Vector2.ZERO
@@ -13,7 +13,7 @@ export var move_speed = 20
 export var max_move = 300
 
 export var jump_speed = 100
-export var max_jump = 2000
+export var max_jump = 1000
 
 export var leap_speed = 100
 export var max_leap = 1000
@@ -22,14 +22,18 @@ var moving = false
 var is_jumping = false
 
 
+func _ready():
+	pass
+
 
 func _physics_process(_delta):
 	velocity.x = clamp(velocity.x,-max_move,max_move)
-		
+	
 	if direction < 0 and not $AnimatedSprite.flip_h: $AnimatedSprite.flip_h = true
 	if direction > 0 and $AnimatedSprite.flip_h: $AnimatedSprite.flip_h = false
-	Backup.position = position
-
+	
+	if position.y > Global.death_zone:
+		queue_free()
 		
 
 func is_moving():
@@ -52,5 +56,4 @@ func set_animation(anim):
 	else: $AnimatedSprite.play()
 
 func die():
-	Backup.current = true
 	queue_free()
